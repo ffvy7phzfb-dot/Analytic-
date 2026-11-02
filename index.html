@@ -104,7 +104,7 @@
 <div id="settingsPanel">
   <h4 style="margin-top: 0; color: #33691e;">Настройка категорий (Сохраняется автоматически)</h4>
   <div class="controls" style="margin-top: 0; box-shadow: none; padding: 0; background: transparent;">
-    <label>Столбец с текстом (output):
+    <label>Столбец с текстом (начиная с 1):
       <input type="number" id="colTextIndex" value="5" min="1" max="20" onchange="saveSettings(); process();">
     </label>
     <label>Коэф. допустимого превышения:
@@ -126,8 +126,9 @@
   </table>
   <div class="settings-buttons">
     <button onclick="addCategoryRow()" style="background:#e8f5e9;border-color:#81c784;">➕ Добавить категорию</button>
+    <button onclick="insertTemplate()" style="background:#e3f2fd;border-color:#64b5f6;">📋 Вставить шаблон</button>
     <button onclick="applySettings()" class="primary">Применить</button>
-    <button onclick="resetSettings()">Сбросить по умолчанию</button>
+    <button onclick="clearCategories()">Очистить все категории</button>
     <button onclick="downloadSettings()">Скачать настройки</button>
     <button onclick="document.getElementById('uploadSettings').click()">Загрузить настройки</button>
     <input type="file" id="uploadSettings" style="display:none" accept=".json" onchange="uploadSettingsFile(event)">
@@ -166,7 +167,7 @@
 
 <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 <script>
-const DEFAULT_CATEGORIES = [
+const TEMPLATE_CATEGORIES = [
   { name: 'Сверкороткие', min: 0,    max: 1000,     norm: [15, 15]  },
   { name: 'Короткие',     min: 1001, max: 2000,     norm: [30, 30]  },
   { name: 'Средние',      min: 2001, max: 4000,     norm: [30, 60]  },
@@ -174,7 +175,7 @@ const DEFAULT_CATEGORIES = [
   { name: 'Экстра',       min: 6001, max: 8000,     norm: [90, 120] },
   { name: 'Некорр',       min: 8001, max: Infinity, norm: [0, 5]    }
 ];
-let CATEGORIES = JSON.parse(JSON.stringify(DEFAULT_CATEGORIES));
+let CATEGORIES = [];
 let validatorsList = [];
 let rows = [];
 let uidToName = {};
@@ -186,7 +187,7 @@ function loadSettingsFromStorage() {
   if (saved) {
     try {
       const parsed = JSON.parse(saved);
-      if (parsed && parsed.length > 0) CATEGORIES = parsed.map(c => ({ ...c, max: c.max === null ? Infinity : c.max }));
+      if (Array.isArray(parsed)) CATEGORIES = parsed.map(c => ({ ...c, max: c.max === null ? Infinity : c.max }));
     } catch(e) { console.error(e); }
   }
   const savedTol = localStorage.getItem('timeReportTolerance');
@@ -204,7 +205,12 @@ function toggleSettings() {
   p.style.display = p.style.display === 'block' ? 'none' : 'block';
 }
 function renderSettingsUI() {
-  document.getElementById('settingsTableBody').innerHTML = CATEGORIES.map((c, i) => `
+  const tbody = document.getElementById('settingsTableBody');
+  if (CATEGORIES.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; color:#888; font-style:italic; padding:16px;">Пока нет ни одной категории. Нажми «➕ Добавить категорию» или «📋 Вставить шаблон».</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = CATEGORIES.map((c, i) => `
     <tr>
       <td><input type="text" id="set_name_${i}" value="${escapeHtml(c.name)}" style="width:140px"></td>
       <td><input type="number" id="set_min_${i}" value="${c.min}" min="0" style="width:70px"></td>
@@ -234,19 +240,30 @@ function addCategoryRow() {
   syncCategoryInputsToArray();
   const last = CATEGORIES[CATEGORIES.length - 1];
   const newMin = (last && last.max !== Infinity && !isNaN(last.max)) ? last.max + 1 : 0;
-  CATEGORIES.push({ name: 'Новая категория', min: newMin, max: Infinity, norm: [30, 30] });
+  CATEGORIES.push({ name: 'Категория ' + (CATEGORIES.length + 1), min: newMin, max: Infinity, norm: [30, 30] });
   renderSettingsUI();
   const trs = document.querySelectorAll('#settingsTableBody tr');
   if (trs.length) trs[trs.length - 1].scrollIntoView({ block: 'nearest' });
 }
+function insertTemplate() {
+  syncCategoryInputsToArray();
+  if (CATEGORIES.length > 0) { if (!confirm('В таблице уже есть категории. Заменить их шаблонными?')) return; }
+  CATEGORIES = JSON.parse(JSON.stringify(TEMPLATE_CATEGORIES));
+  saveSettings(); renderSettingsUI();
+}
 function deleteCategoryRow(index) {
-  if (CATEGORIES.length <= 1) { alert('Должна остаться хотя бы одна категория.'); return; }
   syncCategoryInputsToArray();
   if (!confirm(`Удалить категорию «${CATEGORIES[index].name}»?`)) return;
   CATEGORIES.splice(index, 1);
-  renderSettingsUI();
+  saveSettings(); renderSettingsUI();
 }
-function applySettings() {
+function clearCategories() {
+  if (CATEGORIES.length === 0) return;
+  if (!confirm('Удалить ВСЕ категории? Таблица станет пустой.')) return;
+  CATEGORIES = [];
+  saveSettings(); renderSettingsUI();
+}
+  function applySettings() {
   const newCats = [];
   for (let i = 0; i < CATEGORIES.length; i++) {
     const nameEl = document.getElementById(`set_name_${i}`);
@@ -261,7 +278,7 @@ function applySettings() {
     if (nMax < nMin) return alert(`Ошибка в "${name}": Норма "до" меньше "от".`);
     newCats.push({ name, min, max, norm: [nMin, nMax] });
   }
-  if (newCats.length === 0) return alert('Нужна хотя бы одна категория.');
+  if (newCats.length === 0) return alert('Добавь хотя бы одну категорию перед применением.');
   for (let i = 0; i < newCats.length - 1; i++) {
     if (newCats[i].max !== Infinity && newCats[i].max >= newCats[i+1].min) {
       if (!confirm(`Границы "${newCats[i].name}" и "${newCats[i+1].name}" пересекаются. Продолжить?`)) return;
@@ -269,12 +286,6 @@ function applySettings() {
   }
   CATEGORIES = newCats;
   saveSettings(); toggleSettings();
-  if (rows.length) process();
-}
-function resetSettings() {
-  if (!confirm('Сбросить все настройки категорий?')) return;
-  CATEGORIES = JSON.parse(JSON.stringify(DEFAULT_CATEGORIES));
-  saveSettings(); renderSettingsUI(); toggleSettings();
   if (rows.length) process();
 }
 function downloadSettings() {
@@ -289,7 +300,7 @@ function uploadSettingsFile(event) {
   reader.onload = function(e) {
     try {
       const data = JSON.parse(e.target.result);
-      if (data.categories && Array.isArray(data.categories) && data.categories.length > 0) {
+      if (data.categories && Array.isArray(data.categories)) {
         CATEGORIES = data.categories.map(c => ({...c, max: c.max === null ? Infinity : c.max}));
         if (data.tolerance) document.getElementById('toleranceFactor').value = data.tolerance;
         if (data.colIndex) document.getElementById('colTextIndex').value = data.colIndex;
@@ -365,76 +376,11 @@ function parseNames() {
   document.getElementById('namesStats').innerHTML = `Распознано сотрудников: <b>${Object.keys(uidToName).length}</b>`;
   if (rows.length > 0) process();
 }
-function getToleranceFactor() { const v = parseFloat(document.getElementById('toleranceFactor').value); return (isNaN(v) || v < 1) ? 1.5 : v; }
-function getStatus(min, norm) { if (min == null || isNaN(min)) return ''; const [nMin, nMax] = norm; if (min < nMin) return 'fast'; if (min > nMax) return 'slow'; return 'ok'; }
-function getComment(min, norm) {
-  if (min == null || isNaN(min)) return '—';
-  const [nMin, nMax] = norm; const k = getToleranceFactor(); const allowedMax = nMax * k;
-  if (min < nMin) return 'Быстрее рекомендованного';
-  if (min <= nMax) return 'Рекомендованное время';
-  if (min <= allowedMax) return 'Допустимое время';
-  return 'Время превышено';
-}
-function getCommentClass(c) { if (c === 'Рекомендованное время') return 'ok'; if (c === 'Быстрее рекомендованного') return 'fast'; if (c === 'Допустимое время') return 'warn-text'; if (c === 'Время превышено') return 'slow'; return ''; }
-function fmtHuman(minutes) {
-  if (minutes == null || isNaN(minutes)) return '—';
-  const totalSec = Math.round(Math.abs(minutes) * 60); const sign = minutes < 0 ? '−' : '';
-  const h = Math.floor(totalSec / 3600); const m = Math.floor((totalSec % 3600) / 60); const s = totalSec % 60;
-  const parts = []; if (h > 0) parts.push(h + ' ч'); if (m > 0 || h > 0) parts.push(m + ' мин'); if (s > 0 || parts.length === 0) parts.push(s + ' сек');
-  return sign + parts.join(' ');
-}
-function fmtHMS(minutes) {
-  if (minutes == null || isNaN(minutes)) return '';
-  const totalSec = Math.round(Math.abs(minutes) * 60); const sign = minutes < 0 ? '-' : '';
-  const h = Math.floor(totalSec / 3600); const m = Math.floor((totalSec % 3600) / 60); const s = totalSec % 60;
-  return sign + String(h).padStart(2,'0') + ':' + String(m).padStart(2,'0') + ':' + String(s).padStart(2,'0');
-}
-function categorize(n) { for (const c of CATEGORIES) if (n >= c.min && n <= c.max) return c; return CATEGORIES[CATEGORIES.length - 1]; }
-function unescapeText(s) { return s.replace(/\\n/g, '\n').replace(/\\t/g, '\t').replace(/\\r/g, '\r').replace(/\\"/g, '"').replace(/\\\\/g, '\\'); }
-function extractText(raw) { if (!raw) return ''; const m = raw.match(/"text"\s*:\s*"((?:[^"\\]|\\.)*)"/); if (m) return unescapeText(m[1]); return unescapeText(raw); }
-function escapeHtml(s) { return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
-function parseDate(s) { if (!s) return null; let cleaned = String(s).trim().replace(/(\.\d{3})\d+/, '$1'); const d = new Date(cleaned); return isNaN(d.getTime()) ? null : d; }
-
-function parseExcelClipboard(raw) {
-  raw = raw.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-  const out = []; let curRow = [], cur = '', inQuotes = false, i = 0; const len = raw.length;
-  while (i < len) {
-    const ch = raw[i];
-    if (inQuotes) {
-      if (ch === '"') { if (raw[i+1] === '"') { cur += '"'; i += 2; } else { inQuotes = false; i++; } } else { cur += ch; i++; }
-    } else {
-      if (ch === '"' && cur === '') { inQuotes = true; i++; }
-      else if (ch === '\t') { curRow.push(cur); cur = ''; i++; }
-      else if (ch === '\n') { curRow.push(cur); cur = ''; out.push(curRow); curRow = []; i++; }
-      else { cur += ch; i++; }
-    }
-  }
-  if (cur !== '' || curRow.length) { curRow.push(cur); out.push(curRow); }
-  while (out.length && out[out.length-1].every(c => c === '')) out.pop();
-  return out;
-}
-
-function parseNames() {
-  const raw = document.getElementById('namesInput').value;
-  if (!raw.trim()) { uidToName = {}; document.getElementById('namesStats').innerHTML = '<span style="color:red">Поле пустое</span>'; return; }
-  const lines = raw.split(/\r?\n/); uidToName = {};
-  for (let line of lines) {
-    line = line.trim(); if (!line) continue;
-    let parts = line.split('\t'); if (parts.length < 2) parts = line.split(/,|;/); if (parts.length < 2) parts = line.split(/\s+/);
-    if (parts.length >= 2) {
-      const p1 = parts[0].trim(); const p2 = parts.slice(1).join(' ').trim();
-      const uuidRegex = /^[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}$/;
-      let name, uid;
-      if (uuidRegex.test(p1)) { uid = p1; name = p2; } else if (uuidRegex.test(p2)) { uid = p2; name = p1; }
-      else { if (/\d/.test(p1) && !/\d/.test(p2)) { uid = p1; name = p2; } else { name = p1; uid = p2; } }
-      if (uid && name) uidToName[uid] = name;
-    }
-  }
-  document.getElementById('namesStats').innerHTML = `Распознано сотрудников: <b>${Object.keys(uidToName).length}</b>`;
-  if (rows.length > 0) process();
-}
-
 function process() {
+  if (CATEGORIES.length === 0) {
+    alert('Сначала настрой категории: открой ⚙️ Настройки и добавь хотя бы одну категорию (или нажми «📋 Вставить шаблон»).');
+    return;
+  }
   const t0 = performance.now();
   const valRaw = document.getElementById('validatorsInput').value;
   validatorsList = valRaw.split(/[\n,;]+/).map(s => s.trim()).filter(Boolean);
@@ -515,7 +461,7 @@ function process() {
   renderAll();
   runAIAnalysis();
 }
-function runAIAnalysis() {
+  function runAIAnalysis() {
   const aiPanel = document.getElementById('aiPanel');
   if (!aiPanel) return;
   aiPanel.style.display = 'block';
@@ -565,7 +511,6 @@ function runAIAnalysis() {
   html += `</ul></div>`;
   aiPanel.innerHTML = html;
 }
-
 function getFilteredRows() {
   const name = document.getElementById('nameFilter').value;
   const marker = document.getElementById('markerFilter').value;
@@ -582,7 +527,6 @@ function getFilteredRows() {
   });
 }
 function renderAll() { renderSummary(); render(); }
-
 function renderSummary() {
   const filtered = getFilteredRows();
   const mainRows = filtered.filter(r => r.type !== 'валидация');
@@ -647,7 +591,6 @@ function renderSummary() {
   }
   document.getElementById('summary').innerHTML = parts.join('');
 }
-
 function render() {
   const filtered = getFilteredRows();
   const total = filtered.length;
@@ -692,7 +635,6 @@ function render() {
   if (visible < total) parts.push('<p style="color:#666;font-size:13px">Показаны первые ' + visible + ' из ' + total + '.</p>');
   document.getElementById('result').innerHTML = parts.join('');
 }
-
 function clearAll() {
   document.getElementById('namesInput').value = '';
   document.getElementById('validatorsInput').value = '';
@@ -708,7 +650,6 @@ function clearAll() {
   document.getElementById('categoryFilter').value = '';
   rows = []; uidToName = {}; validatorsList = [];
 }
-
 function downloadXLSX() {
   if (!rows.length) return alert('Сначала нажми «Посчитать»');
   if (typeof XLSX === 'undefined') return alert('Библиотека XLSX не загрузилась.');
@@ -767,7 +708,6 @@ function downloadXLSX() {
   if (groupKeys.length) XLSX.utils.book_append_sheet(wb, ws3, 'Повторы');
   XLSX.writeFile(wb, 'ai-time-report.xlsx');
 }
-
 function downloadCSV() {
   if (!rows.length) return alert('Сначала нажми «Посчитать»');
   const filtered = getFilteredRows();
