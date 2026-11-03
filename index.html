@@ -14,6 +14,8 @@
   button.ai-btn { background: #673ab7; color: white; font-weight: bold; border-color: #673ab7; }
   button.ai-btn:hover { background: #5e35b1; }
   button.warn { background: #fff3cd; border-color: #ffc107; }
+  button.clear-btn { background: #ffebee; border-color: #ef9a9a; color: #c62828; font-size: 12px; padding: 4px 10px; margin-left: 8px; }
+  button.clear-btn:hover { background: #ffcdd2; }
   h3 { margin-top: 28px; color: #333; }
   .stats { margin: 10px 0; color: #444; font-size: 14px; }
   table { border-collapse: collapse; width: 100%; margin-top: 12px; font-size: 13px; background: white; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
@@ -46,6 +48,7 @@
   .controls { margin: 15px 0; font-size: 14px; display: flex; flex-wrap: wrap; gap: 16px; align-items: center; background: white; padding: 12px; border-radius: 6px; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
   .controls label { display: inline-flex; align-items: center; gap: 6px; }
   .controls input[type=number] { padding: 6px 10px; font-size: 14px; border: 1px solid #ccc; border-radius: 4px; width: 80px; }
+  .controls input[type=date] { padding: 6px 10px; font-size: 14px; border: 1px solid #ccc; border-radius: 4px; }
   .warn-msg { background: #fff3cd; border: 1px solid #ffc107; padding: 10px; margin: 10px 0; border-radius: 6px; color: #856404; }
   .ok { color: #2e7d32; font-weight: bold; }
   .fast { color: #1565c0; font-weight: bold; }
@@ -63,6 +66,16 @@
   #settingsTable th, #settingsTable td { padding: 6px 10px; text-align: center; }
   .flex-row { display: flex; gap: 20px; flex-wrap: wrap; }
   .flex-col { flex: 1; min-width: 300px; }
+  
+  /* Стили для кнопок-чипсов сотрудников */
+  .emp-chip {
+    display: inline-flex; align-items: center; gap: 4px; padding: 6px 12px;
+    background: #f1f3f5; border: 1px solid #ced4da; border-radius: 20px;
+    cursor: pointer; font-size: 13px; user-select: none; transition: all 0.2s; color: #333;
+  }
+  .emp-chip:hover { background: #e9ecef; }
+  .emp-chip.selected { background: #4caf50; color: white; border-color: #4caf50; font-weight: bold; }
+  .emp-chip.selected:hover { background: #43a047; }
 </style>
 </head>
 <body>
@@ -77,19 +90,25 @@
 
 <div class="flex-row">
   <div class="flex-col">
-    <h3>Шаг 1. База сотрудников (Фамилия — ID)</h3>
+    <h3>Шаг 1. База сотрудников (Фамилия — ID)
+      <button class="clear-btn" onclick="clearField('namesInput')" title="Очистить поле">✕ Очистить</button>
+    </h3>
     <textarea id="namesInput" placeholder="Иванова	a3c3cda7-e793-4bc9-88fe-8cbcbb130030&#10;Петров	8a2486ea-37ec-460b-a2f2-a8713fae1b93"></textarea>
     <button onclick="parseNames()">Сопоставить ID</button>
     <span id="namesStats" class="name-match-stats"></span>
   </div>
   <div class="flex-col">
-    <h3>Шаг 2. Валидаторы (ID или Фамилия)</h3>
+    <h3>Шаг 2. Валидаторы (ID или Фамилия)
+      <button class="clear-btn" onclick="clearField('validatorsInput')" title="Очистить поле">✕ Очистить</button>
+    </h3>
     <textarea id="validatorsInput" placeholder="a3c3cda7-e793-4bc9-88fe-8cbcbb130030&#10;Петров" onchange="process()"></textarea>
     <span id="validatorsStats" class="name-match-stats"></span>
   </div>
 </div>
 
-<h3>Шаг 3. Данные заданий</h3>
+<h3>Шаг 3. Данные заданий
+  <button class="clear-btn" onclick="clearField('input')" title="Очистить поле">✕ Очистить</button>
+</h3>
 <textarea id="input" placeholder="Вставьте сюда данные из Excel..."></textarea>
 
 <div>
@@ -98,7 +117,7 @@
   <button class="warn" onclick="toggleSettings()">⚙️ Настройки</button>
   <button onclick="downloadXLSX()">Скачать Excel</button>
   <button onclick="downloadCSV()">Скачать CSV</button>
-  <button onclick="clearAll()">Очистить</button>
+  <button onclick="clearAll()" style="background:#ffebee;border-color:#ef9a9a;color:#c62828;font-weight:bold;">Очистить всё</button>
 </div>
 
 <div id="settingsPanel">
@@ -135,28 +154,89 @@
   </div>
 </div>
 
-<div class="controls">
-  <label>Сотрудник: <select id="nameFilter" onchange="renderAll()"><option value="">— все —</option></select></label>
-  <label>marker_id: <select id="markerFilter" onchange="renderAll()"><option value="">— все —</option></select></label>
-  <label>Статус:
-    <select id="statusFilter" onchange="renderAll()">
-      <option value="">— все —</option>
-      <option value="fast">Быстрее нормы</option>
-      <option value="ok">В норме</option>
-      <option value="slow">Медленнее нормы</option>
-    </select>
-  </label>
-  <label>Тип:
-    <select id="typeFilter" onchange="renderAll()">
-      <option value="">— все —</option>
-      <option value="первичная">Первичные</option>
-      <option value="повтор">Повторы</option>
-      <option value="валидация">Валидации</option>
-    </select>
-  </label>
-  <label>Категория: <select id="categoryFilter" onchange="renderAll()"><option value="">— все —</option></select></label>
-  <label><input type="checkbox" id="showAll" onchange="renderAll()"> Показывать всю таблицу</label>
+<!-- ================= БЛОК ФИЛЬТРОВ ================= -->
+<div class="controls" style="display: block; background: white; padding: 15px; border-radius: 6px; box-shadow: 0 1px 2px rgba(0,0,0,0.05); margin-bottom: 15px;">
+  
+  <!-- Поиск и чипсы сотрудников -->
+  <div style="margin-bottom: 15px; padding-bottom: 15px; border-bottom: 1px solid #eee;">
+    <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px; flex-wrap: wrap;">
+      <b style="color: #1a237e; font-size: 14px;">👥 Фильтр по сотрудникам:</b>
+      <input type="text" id="employeeSearch" placeholder="поиск по фамилии..." oninput="renderEmployeeChips()" style="width: 250px; padding: 6px 10px; border: 1px solid #ccc; border-radius: 4px; font-size: 13px;">
+      <button onclick="clearEmployeeSearch()" class="clear-btn" title="Очистить поиск">✕</button>
+      <button onclick="selectAllEmployees()" style="padding: 4px 8px; font-size: 12px; margin: 0;">Выбрать всех</button>
+      <button onclick="clearAllEmployees()" style="padding: 4px 8px; font-size: 12px; margin: 0;">Снять всех</button>
+    </div>
+    <div id="employeeChips" style="display: flex; flex-wrap: wrap; gap: 8px; max-height: 180px; overflow-y: auto; padding: 4px;"></div>
+  </div>
+
+  <!-- Остальные фильтры -->
+  <div style="display: flex; flex-wrap: wrap; gap: 16px; align-items: center; font-size: 14px;">
+    <label style="display: inline-flex; align-items: center; gap: 6px;">
+      marker_id: 
+      <select id="markerFilter" onchange="renderAll()"><option value="">— все —</option></select>
+    </label>
+
+    <label style="display: inline-flex; align-items: center; gap: 6px;">
+      Дата (от):
+      <input type="date" id="dateFromFilter" onchange="renderAll()">
+    </label>
+    <label style="display: inline-flex; align-items: center; gap: 6px;">
+      Дата (до):
+      <input type="date" id="dateToFilter" onchange="renderAll()">
+    </label>
+    
+    <label style="display: inline-flex; align-items: center; gap: 6px;">
+      Время: 
+      <select id="timeFilter" onchange="renderAll()">
+        <option value="">— всё время —</option>
+        <option value="0-1">до 1 мин</option>
+        <option value="1-5">1–5 мин</option>
+        <option value="5-15">5–15 мин</option>
+        <option value="15-30">15–30 мин</option>
+        <option value="30-60">30–60 мин</option>
+        <option value="60-120">1–2 часа</option>
+        <option value="120-">больше 2 часов</option>
+      </select>
+    </label>
+
+    <label style="display: inline-flex; align-items: center; gap: 6px;">
+      Статус:
+      <select id="statusFilter" onchange="renderAll()">
+        <option value="">— все —</option>
+        <option value="fast">Быстрее нормы</option>
+        <option value="ok">В норме</option>
+        <option value="slow">Медленнее нормы</option>
+      </select>
+    </label>
+
+    <label style="display: inline-flex; align-items: center; gap: 6px;">
+      Тип:
+      <select id="typeFilter" onchange="renderAll()">
+        <option value="">— все —</option>
+        <option value="первичная">Первичные</option>
+        <option value="повтор">Повторы</option>
+        <option value="валидация">Валидации</option>
+      </select>
+    </label>
+
+    <label style="display: inline-flex; align-items: center; gap: 6px;">
+      Категория: 
+      <select id="categoryFilter" onchange="renderAll()"><option value="">— все —</option></select>
+    </label>
+    
+    <label style="display: inline-flex; align-items: center; gap: 6px;">
+      <input type="checkbox" id="showAll" onchange="renderAll()"> Показывать всю таблицу
+    </label>
+    
+    <button onclick="resetFilters()" class="clear-btn" style="padding: 6px 12px; font-size: 13px;">↺ Сбросить фильтры</button>
+  </div>
 </div>
+<!-- ================= КОНЕЦ БЛОКА ФИЛЬТРОВ ================= -->
+
+<!-- ================= СТАТИСТИКА ПО СОТРУДНИКАМ ================= -->
+<h3>📊 Статистика по сотрудникам <span style="font-weight:normal;font-size:13px;color:#666">(учитывает активные фильтры)</span></h3>
+<div id="empStatsTable" style="margin-bottom: 20px;"></div>
+<!-- ================= КОНЕЦ ================= -->
 
 <div id="aiPanel" style="display: none;"></div>
 <div class="stats" id="stats"></div>
@@ -179,6 +259,7 @@ let CATEGORIES = [];
 let validatorsList = [];
 let rows = [];
 let uidToName = {};
+let selectedEmployees = new Set();
 
 window.onload = function() { loadSettingsFromStorage(); renderSettingsUI(); };
 
@@ -263,7 +344,7 @@ function clearCategories() {
   CATEGORIES = [];
   saveSettings(); renderSettingsUI();
 }
-  function applySettings() {
+function applySettings() {
   const newCats = [];
   for (let i = 0; i < CATEGORIES.length; i++) {
     const nameEl = document.getElementById(`set_name_${i}`);
@@ -339,6 +420,15 @@ function unescapeText(s) { return s.replace(/\\n/g, '\n').replace(/\\t/g, '\t').
 function extractText(raw) { if (!raw) return ''; const m = raw.match(/"text"\s*:\s*"((?:[^"\\]|\\.)*)"/); if (m) return unescapeText(m[1]); return unescapeText(raw); }
 function escapeHtml(s) { return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function parseDate(s) { if (!s) return null; let cleaned = String(s).trim().replace(/(\.\d{3})\d+/, '$1'); const d = new Date(cleaned); return isNaN(d.getTime()) ? null : d; }
+
+function fmtDateOnly(dateObj) {
+  if (!dateObj) return '';
+  const d = String(dateObj.getDate()).padStart(2, '0');
+  const m = String(dateObj.getMonth() + 1).padStart(2, '0');
+  const y = dateObj.getFullYear();
+  return `${d}.${m}.${y}`;
+}
+
 function parseExcelClipboard(raw) {
   raw = raw.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
   const out = []; let curRow = [], cur = '', inQuotes = false, i = 0; const len = raw.length;
@@ -448,20 +538,195 @@ function process() {
   document.getElementById('stats').textContent = 'Обработано строк: ' + rows.length + ' | Время: ' + (performance.now() - t0).toFixed(0) + ' мс';
   const warnEl = document.getElementById('warnings');
   warnEl.innerHTML = warnings.length ? '<div class="warn-msg"><b>Предупреждения (' + warnings.length + '):</b><br>' + warnings.slice(0, 20).map(escapeHtml).join('<br>') + '</div>' : '';
-  const names = [...new Set(rows.map(r => r.workerName).filter(Boolean))].sort();
-  const nameSel = document.getElementById('nameFilter'); const currentName = nameSel.value;
-  nameSel.innerHTML = '<option value="">— все (' + names.length + ') —</option>' + names.map(n => `<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`).join('');
-  if (names.includes(currentName)) nameSel.value = currentName;
+  
   const markers = [...new Set(rows.map(r => r.marker_id).filter(Boolean))].sort();
   const sel = document.getElementById('markerFilter'); const currentMarker = sel.value;
   sel.innerHTML = '<option value="">— все (' + markers.length + ') —</option>' + markers.map(m => `<option value="${escapeHtml(m)}">${escapeHtml(m)}</option>`).join('');
   if (markers.includes(currentMarker)) sel.value = currentMarker;
+  
   const catSel = document.getElementById('categoryFilter');
   catSel.innerHTML = '<option value="">— все —</option>' + CATEGORIES.map(c => `<option value="${escapeHtml(c.name)}">${escapeHtml(c.name)}</option>`).join('');
+  
+  updateEmployeeChips();
   renderAll();
-  runAIAnalysis();
 }
-  function runAIAnalysis() {
+
+function updateEmployeeChips() {
+  const names = [...new Set(rows.map(r => r.workerName).filter(Boolean))].sort();
+  if (selectedEmployees.size === 0) {
+     names.forEach(n => selectedEmployees.add(n));
+  }
+  renderEmployeeChips();
+}
+
+function renderEmployeeChips() {
+  const container = document.getElementById('employeeChips');
+  const search = document.getElementById('employeeSearch').value.toLowerCase();
+  const names = [...new Set(rows.map(r => r.workerName).filter(Boolean))].sort();
+  
+  const filteredNames = names.filter(n => n.toLowerCase().includes(search));
+  
+  if (filteredNames.length === 0) {
+    container.innerHTML = '<span style="color: #888; font-style: italic;">Сотрудники не найдены</span>';
+    return;
+  }
+
+  container.innerHTML = filteredNames.map(name => {
+    const isSelected = selectedEmployees.has(name);
+    return `<div class="emp-chip ${isSelected ? 'selected' : ''}" onclick="toggleEmployee('${escapeHtml(name).replace(/'/g, "\\'")}')">
+      ${isSelected ? '✓ ' : ''}${escapeHtml(name)}
+    </div>`;
+  }).join('');
+}
+
+function toggleEmployee(name) {
+  if (selectedEmployees.has(name)) {
+    selectedEmployees.delete(name);
+  } else {
+    selectedEmployees.add(name);
+  }
+  renderEmployeeChips();
+  renderAll();
+}
+
+function selectAllEmployees() {
+  const search = document.getElementById('employeeSearch').value.toLowerCase();
+  const names = [...new Set(rows.map(r => r.workerName).filter(Boolean))].sort();
+  names.filter(n => n.toLowerCase().includes(search)).forEach(n => selectedEmployees.add(n));
+  renderEmployeeChips();
+  renderAll();
+}
+
+function clearAllEmployees() {
+  const search = document.getElementById('employeeSearch').value.toLowerCase();
+  const names = [...new Set(rows.map(r => r.workerName).filter(Boolean))].sort();
+  names.filter(n => n.toLowerCase().includes(search)).forEach(n => selectedEmployees.delete(n));
+  renderEmployeeChips();
+  renderAll();
+}
+
+function clearEmployeeSearch() {
+  document.getElementById('employeeSearch').value = '';
+  renderEmployeeChips();
+}
+
+function getFilteredRows() {
+  const marker = document.getElementById('markerFilter').value;
+  const status = document.getElementById('statusFilter').value;
+  const type = document.getElementById('typeFilter').value;
+  const category = document.getElementById('categoryFilter').value;
+  const timeVal = document.getElementById('timeFilter').value;
+  
+  const dateFromVal = document.getElementById('dateFromFilter').value;
+  const dateToVal = document.getElementById('dateToFilter').value;
+  let dateFrom = dateFromVal ? new Date(dateFromVal + 'T00:00:00') : null;
+  let dateTo = dateToVal ? new Date(dateToVal + 'T23:59:59') : null;
+
+  let tMin = null, tMax = null;
+  if (timeVal) {
+    const parts = timeVal.split('-');
+    tMin = parts[0] === '' ? null : parseFloat(parts[0]);
+    tMax = parts[1] === '' || parts[1] === undefined ? null : parseFloat(parts[1]);
+  }
+
+  return rows.filter(r => {
+    const hasAnyEmployees = rows.some(row => row.workerName);
+    if (hasAnyEmployees && !selectedEmployees.has(r.workerName)) return false;
+    
+    if (marker && r.marker_id !== marker) return false;
+    if (type && r.type !== type) return false;
+    if (category && r.cat !== category) return false;
+    if (status) { const st = getStatus(r.minutes, r.norm); if (st !== status) return false; }
+
+    if (dateFrom || dateTo) {
+      if (!r.startD) return false;
+      if (dateFrom && r.startD < dateFrom) return false;
+      if (dateTo && r.startD > dateTo) return false;
+    }
+
+    if (tMin !== null || tMax !== null) {
+      if (r.minutes === null || isNaN(r.minutes)) return false;
+      if (tMin !== null && r.minutes < tMin) return false;
+      if (tMax !== null && r.minutes > tMax) return false;
+    }
+
+    return true;
+  });
+}
+
+function renderEmployeeStats() {
+  const container = document.getElementById('empStatsTable');
+  const filtered = getFilteredRows().filter(r => r.type !== 'валидация');
+  
+  if (filtered.length === 0) {
+    container.innerHTML = '<p style="color:#888;font-style:italic;">Нет данных для отображения (проверь фильтры).</p>';
+    return;
+  }
+
+  const groupsMap = {}; const uniqueTasks = [];
+  for (const r of filtered) {
+    if (r.group > 0) { 
+      if (!groupsMap[r.group]) { groupsMap[r.group] = []; uniqueTasks.push(r); } 
+      groupsMap[r.group].push(r); 
+    }
+    else { uniqueTasks.push(r); }
+  }
+
+  const empStats = {};
+  for (const task of uniqueTasks) {
+    const emp = task.workerName || '(без имени)';
+    if (!empStats[emp]) {
+      empStats[emp] = { fast: 0, ok: 0, slow: 0, totalMin: 0, count: 0, chars: 0 };
+    }
+    let tMin = task.minutes || 0;
+    let tNorm = task.norm;
+    let tChars = task.chars;
+    if (task.group > 0) {
+      const items = groupsMap[task.group];
+      tMin = items.reduce((s, r) => s + (r.minutes || 0), 0);
+      tNorm = items.reduce((m, r) => r.chars > m.chars ? r : m, items[0]).norm;
+      tChars = items.reduce((m, r) => r.chars > m.chars ? r : m, items[0]).chars;
+    }
+    const st = getStatus(tMin, tNorm);
+    if (st === 'fast') empStats[emp].fast++;
+    else if (st === 'slow') empStats[emp].slow++;
+    else if (st === 'ok') empStats[emp].ok++;
+    empStats[emp].totalMin += tMin;
+    empStats[emp].count++;
+    empStats[emp].chars += tChars;
+  }
+
+  const sorted = Object.entries(empStats).sort((a, b) => b[1].slow - a[1].slow || b[1].count - a[1].count);
+
+  let html = '<table><thead><tr>';
+  html += '<th>Сотрудник</th><th>Всего задач</th><th>🔴 Медленных</th><th>🟢 В норме</th><th>🔵 Быстрых</th>';
+  html += '<th>% медленных</th><th>Среднее время</th><th>Общее время</th><th>Символов</th>';
+  html += '</tr></thead><tbody>';
+
+  for (const [emp, s] of sorted) {
+    const pctSlow = s.count ? (s.slow / s.count * 100).toFixed(1) : '0.0';
+    const avg = s.count ? s.totalMin / s.count : 0;
+    let rowClass = '';
+    if (s.slow > 0 && pctSlow >= 30) rowClass = 'style="background:#ffebee;"';
+    else if (s.slow > 0 && pctSlow >= 15) rowClass = 'style="background:#fff3e0;"';
+    
+    html += `<tr ${rowClass}>`;
+    html += `<td><b>${escapeHtml(emp)}</b></td>`;
+    html += `<td class="num">${s.count}</td>`;
+    html += `<td class="num ${s.slow > 0 ? 'slow' : ''}">${s.slow}</td>`;
+    html += `<td class="num ok">${s.ok}</td>`;
+    html += `<td class="num fast">${s.fast}</td>`;
+    html += `<td class="num">${pctSlow}%</td>`;
+    html += `<td class="num">${fmtHuman(avg)}</td>`;
+    html += `<td class="num">${fmtHuman(s.totalMin)}</td>`;
+    html += `<td class="num">${s.chars}</td>`;
+    html += `</tr>`;
+  }
+  html += '</tbody></table>';
+  container.innerHTML = html;
+}
+
+function runAIAnalysis() {
   const aiPanel = document.getElementById('aiPanel');
   if (!aiPanel) return;
   aiPanel.style.display = 'block';
@@ -511,22 +776,9 @@ function process() {
   html += `</ul></div>`;
   aiPanel.innerHTML = html;
 }
-function getFilteredRows() {
-  const name = document.getElementById('nameFilter').value;
-  const marker = document.getElementById('markerFilter').value;
-  const status = document.getElementById('statusFilter').value;
-  const type = document.getElementById('typeFilter').value;
-  const category = document.getElementById('categoryFilter').value;
-  return rows.filter(r => {
-    if (name && r.workerName !== name) return false;
-    if (marker && r.marker_id !== marker) return false;
-    if (type && r.type !== type) return false;
-    if (category && r.cat !== category) return false;
-    if (status) { const st = getStatus(r.minutes, r.norm); if (st !== status) return false; }
-    return true;
-  });
-}
-function renderAll() { renderSummary(); render(); }
+
+function renderAll() { renderSummary(); renderEmployeeStats(); render(); }
+
 function renderSummary() {
   const filtered = getFilteredRows();
   const mainRows = filtered.filter(r => r.type !== 'валидация');
@@ -591,6 +843,7 @@ function renderSummary() {
   }
   document.getElementById('summary').innerHTML = parts.join('');
 }
+
 function render() {
   const filtered = getFilteredRows();
   const total = filtered.length;
@@ -600,7 +853,7 @@ function render() {
   const limit = showAll ? total : Math.min(total, 500);
   const visible = Math.min(limit, total);
   const parts = [];
-  parts.push('<table><thead><tr><th>#</th><th>Тип</th><th>Повтор</th><th>Сотрудник</th><th>marker_id</th><th>file_name</th><th>Символов</th><th>Категория</th><th>Начало</th><th>Конец</th><th>Затрачено</th><th>Норма</th><th>Статус</th><th>Комментарий</th><th>Текст</th></tr></thead><tbody>');
+  parts.push('<table><thead><tr><th>#</th><th>Дата</th><th>Тип</th><th>Повтор</th><th>Сотрудник</th><th>marker_id</th><th>file_name</th><th>Символов</th><th>Категория</th><th>Начало</th><th>Конец</th><th>Затрачено</th><th>Норма</th><th>Статус</th><th>Комментарий</th><th>Текст</th></tr></thead><tbody>');
   for (let i = 0; i < visible; i++) {
     const r = filtered[i];
     let catIndex = CATEGORIES.findIndex(c => c.name === r.cat);
@@ -617,7 +870,9 @@ function render() {
     const commentClass = getCommentClass(comment);
     const preview = r.text.length > 120 ? r.text.slice(0, 120) + '…' : r.text;
     parts.push('<tr class="' + cls + '">');
-    parts.push('<td>' + r.idx + '</td><td class="type-' + r.type + '">' + r.type + '</td>');
+    parts.push('<td>' + r.idx + '</td>');
+    parts.push('<td style="font-size:12px;font-weight:bold;white-space:nowrap;">' + fmtDateOnly(r.startD) + '</td>');
+    parts.push('<td class="type-' + r.type + '">' + r.type + '</td>');
     parts.push('<td>' + (r.group > 0 ? '<b>№' + r.group + '</b>' : '') + '</td>');
     parts.push('<td><b>' + escapeHtml(r.workerName || '') + '</b></td>');
     parts.push('<td class="id-cell">' + escapeHtml(r.marker_id) + '</td>');
@@ -635,34 +890,71 @@ function render() {
   if (visible < total) parts.push('<p style="color:#666;font-size:13px">Показаны первые ' + visible + ' из ' + total + '.</p>');
   document.getElementById('result').innerHTML = parts.join('');
 }
-function clearAll() {
-  document.getElementById('namesInput').value = '';
-  document.getElementById('validatorsInput').value = '';
-  document.getElementById('input').value = '';
-  ['stats','summary','result','warnings','namesStats','validatorsStats'].forEach(id => document.getElementById(id).innerHTML = '');
-  document.getElementById('aiPanel').style.display = 'none';
-  document.getElementById('aiPanel').innerHTML = '';
-  document.getElementById('detailTitle').style.display = 'none';
-  document.getElementById('markerFilter').innerHTML = '<option value="">— все —</option>';
-  document.getElementById('nameFilter').innerHTML = '<option value="">— все —</option>';
+
+// ===================== ОЧИСТКА =====================
+function clearField(id) {
+  document.getElementById(id).value = '';
+  if (id === 'namesInput') {
+    uidToName = {};
+    document.getElementById('namesStats').innerHTML = '';
+  } else if (id === 'validatorsInput') {
+    validatorsList = [];
+    document.getElementById('validatorsStats').innerHTML = '';
+  }
+}
+
+function resetFilters() {
+  document.getElementById('markerFilter').value = '';
   document.getElementById('statusFilter').value = '';
   document.getElementById('typeFilter').value = '';
   document.getElementById('categoryFilter').value = '';
-  rows = []; uidToName = {}; validatorsList = [];
+  document.getElementById('timeFilter').value = '';
+  document.getElementById('dateFromFilter').value = '';
+  document.getElementById('dateToFilter').value = '';
+  document.getElementById('employeeSearch').value = '';
+  document.getElementById('showAll').checked = false;
+  // Выбираем всех сотрудников обратно
+  selectedEmployees.clear();
+  const names = [...new Set(rows.map(r => r.workerName).filter(Boolean))];
+  names.forEach(n => selectedEmployees.add(n));
+  renderEmployeeChips();
+  renderAll();
 }
+
+function clearAll() {
+  if (!confirm('Очистить все данные и фильтры? Это действие нельзя отменить.')) return;
+  document.getElementById('namesInput').value = '';
+  document.getElementById('validatorsInput').value = '';
+  document.getElementById('input').value = '';
+  ['stats','summary','result','warnings','namesStats','validatorsStats','aiPanel','empStatsTable'].forEach(id => document.getElementById(id).innerHTML = '');
+  document.getElementById('aiPanel').style.display = 'none';
+  document.getElementById('detailTitle').style.display = 'none';
+  document.getElementById('markerFilter').innerHTML = '<option value="">— все —</option>';
+  document.getElementById('statusFilter').value = '';
+  document.getElementById('typeFilter').value = '';
+  document.getElementById('categoryFilter').value = '';
+  document.getElementById('timeFilter').value = '';
+  document.getElementById('dateFromFilter').value = '';
+  document.getElementById('dateToFilter').value = '';
+  document.getElementById('employeeSearch').value = '';
+  document.getElementById('showAll').checked = false;
+  document.getElementById('employeeChips').innerHTML = '';
+  rows = []; uidToName = {}; validatorsList = []; selectedEmployees.clear();
+}
+
 function downloadXLSX() {
   if (!rows.length) return alert('Сначала нажми «Посчитать»');
   if (typeof XLSX === 'undefined') return alert('Библиотека XLSX не загрузилась.');
   const filtered = getFilteredRows();
-  const detailData = [['№','Тип','Повтор','Сотрудник','marker_id','file_name','Символов','Категория','Начало','Конец','Затрачено (ЧЧ:ММ:СС)','Затрачено','Норма (мин)','Статус','Комментарий','Текст']];
+  const detailData = [['№','Дата','Тип','Повтор','Сотрудник','marker_id','file_name','Символов','Категория','Начало','Конец','Затрачено (ЧЧ:ММ:СС)','Затрачено','Норма (мин)','Статус','Комментарий','Текст']];
   for (const r of filtered) {
     const st = getStatus(r.minutes, r.norm);
     const stLabel = st === 'fast' ? 'быстрее' : st === 'slow' ? 'медленнее' : st === 'ok' ? 'в норме' : '';
     const normStr = r.norm[0] === r.norm[1] ? String(r.norm[0]) : (r.norm[0] + '–' + r.norm[1]);
-    detailData.push([r.idx, r.type, r.group || '', r.workerName || '', r.marker_id, r.file_name, r.chars, r.cat, r.startRaw, r.endRaw, fmtHMS(r.minutes), fmtHuman(r.minutes), normStr, stLabel, getComment(r.minutes, r.norm), r.text]);
+    detailData.push([r.idx, fmtDateOnly(r.startD), r.type, r.group || '', r.workerName || '', r.marker_id, r.file_name, r.chars, r.cat, r.startRaw, r.endRaw, fmtHMS(r.minutes), fmtHuman(r.minutes), normStr, stLabel, getComment(r.minutes, r.norm), r.text]);
   }
   const ws1 = XLSX.utils.aoa_to_sheet(detailData);
-  ws1['!cols'] = [{ wch: 5 }, { wch: 12 }, { wch: 8 }, { wch: 20 }, { wch: 38 }, { wch: 38 }, { wch: 10 }, { wch: 14 }, { wch: 22 }, { wch: 22 }, { wch: 12 }, { wch: 18 }, { wch: 12 }, { wch: 12 }, { wch: 22 }, { wch: 80 }];
+  ws1['!cols'] = [{ wch: 5 }, { wch: 12 }, { wch: 12 }, { wch: 8 }, { wch: 20 }, { wch: 38 }, { wch: 38 }, { wch: 10 }, { wch: 14 }, { wch: 22 }, { wch: 22 }, { wch: 12 }, { wch: 18 }, { wch: 12 }, { wch: 12 }, { wch: 22 }, { wch: 80 }];
   const mainRows = filtered.filter(r => r.type !== 'валидация');
   const groupsMap = {}; const uniqueTasks = [];
   for (const r of mainRows) {
@@ -690,7 +982,7 @@ function downloadXLSX() {
   const ws2 = XLSX.utils.aoa_to_sheet(summaryData);
   ws2['!cols'] = [{ wch: 16 }, { wch: 12 }, { wch: 14 }, { wch: 8 }, { wch: 18 }, { wch: 22 }, { wch: 22 }];
   const groupKeys = Object.keys(groupsMap).sort((a,b) => a - b);
-  const dupData = [['Группа','Сотрудник','marker_id','file_name','Повторов','Суммарное время','Норма (по самой большой)','Сравнение','Символов','Категория']];
+  const dupData = [['Группа','Дата','Сотрудник','marker_id','file_name','Повторов','Суммарное время','Норма (по самой большой)','Сравнение','Символов','Категория']];
   for (const g of groupKeys) {
     const items = groupsMap[g]; const first = items[0];
     const sumMin = items.reduce((s, r) => s + (r.minutes || 0), 0);
@@ -698,25 +990,26 @@ function downloadXLSX() {
     const [nMin, nMax] = biggest.norm;
     let cmp = '';
     if (sumMin > 0) { if (sumMin < nMin) cmp = 'быстрее на ' + fmtHuman(nMin - sumMin); else if (sumMin > nMax) cmp = 'медленнее на ' + fmtHuman(sumMin - nMax); else cmp = 'в норме'; }
-    dupData.push(['№' + g, first.workerName || '', first.marker_id, first.file_name, items.length, fmtHuman(sumMin), biggest.norm[0] === biggest.norm[1] ? String(biggest.norm[0]) : (biggest.norm[0] + '–' + biggest.norm[1]), cmp, [...new Set(items.map(r => r.chars))].join(', '), [...new Set(items.map(r => r.cat))].join(', ')]);
+    dupData.push(['№' + g, fmtDateOnly(first.startD), first.workerName || '', first.marker_id, first.file_name, items.length, fmtHuman(sumMin), biggest.norm[0] === biggest.norm[1] ? String(biggest.norm[0]) : (biggest.norm[0] + '–' + biggest.norm[1]), cmp, [...new Set(items.map(r => r.chars))].join(', '), [...new Set(items.map(r => r.cat))].join(', ')]);
   }
   const ws3 = XLSX.utils.aoa_to_sheet(dupData);
-  ws3['!cols'] = [{ wch: 8 }, { wch: 20 }, { wch: 38 }, { wch: 38 }, { wch: 10 }, { wch: 18 }, { wch: 28 }, { wch: 26 }, { wch: 14 }, { wch: 16 }];
+  ws3['!cols'] = [{ wch: 8 }, { wch: 12 }, { wch: 20 }, { wch: 38 }, { wch: 38 }, { wch: 10 }, { wch: 18 }, { wch: 28 }, { wch: 26 }, { wch: 14 }, { wch: 16 }];
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws1, 'Детализация');
   XLSX.utils.book_append_sheet(wb, ws2, 'Сводка');
   if (groupKeys.length) XLSX.utils.book_append_sheet(wb, ws3, 'Повторы');
   XLSX.writeFile(wb, 'ai-time-report.xlsx');
 }
+
 function downloadCSV() {
   if (!rows.length) return alert('Сначала нажми «Посчитать»');
   const filtered = getFilteredRows();
-  let csv = '\uFEFF№;Тип;Повтор;Сотрудник;marker_id;file_name;Символов;Категория;Начало;Конец;Затрачено_ЧЧММСС;Затрачено;Норма_мин;Статус;Комментарий;Текст\n';
+  let csv = '\uFEFF№;Дата;Тип;Повтор;Сотрудник;marker_id;file_name;Символов;Категория;Начало;Конец;Затрачено_ЧЧММСС;Затрачено;Норма_мин;Статус;Комментарий;Текст\n';
   for (const r of filtered) {
     const st = getStatus(r.minutes, r.norm);
     const stLabel = st === 'fast' ? 'быстрее' : st === 'slow' ? 'медленнее' : st === 'ok' ? 'в норме' : '';
     const normStr = r.norm[0] === r.norm[1] ? r.norm[0] : r.norm[0] + '-' + r.norm[1];
-    csv += r.idx + ';' + r.type + ';' + (r.group || '') + ';"' + (r.workerName || '').replace(/"/g, '""') + '";"' + r.marker_id.replace(/"/g, '""') + '";"' + r.file_name.replace(/"/g, '""') + '";' + r.chars + ';' + r.cat + ';"' + r.startRaw + '";"' + r.endRaw + '";' + fmtHMS(r.minutes) + ';' + fmtHuman(r.minutes) + ';' + normStr + ';' + stLabel + ';"' + getComment(r.minutes, r.norm) + '";"' + r.text.replace(/"/g, '""') + '"\n';
+    csv += r.idx + ';"' + fmtDateOnly(r.startD) + '";' + r.type + ';' + (r.group || '') + ';"' + (r.workerName || '').replace(/"/g, '""') + '";"' + r.marker_id.replace(/"/g, '""') + '";"' + r.file_name.replace(/"/g, '""') + '";' + r.chars + ';' + r.cat + ';"' + r.startRaw + '";"' + r.endRaw + '";' + fmtHMS(r.minutes) + ';' + fmtHuman(r.minutes) + ';' + normStr + ';' + stLabel + ';"' + getComment(r.minutes, r.norm) + '";"' + r.text.replace(/"/g, '""') + '"\n';
   }
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'ai-time-report.csv'; a.click();
